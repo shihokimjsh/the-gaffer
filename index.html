@@ -152,8 +152,24 @@ select.dec.changed{border-color:var(--strong);font-weight:600}
 .pp.weak .dot{box-shadow:0 0 0 3px var(--loss)}
 .pp.sel .dot{box-shadow:0 0 0 3px var(--strong)}
 .chooser{display:flex;flex-direction:column;gap:6px;max-height:560px;overflow-y:auto;padding-right:2px}
-.choice{display:flex;justify-content:space-between;align-items:center;gap:10px;text-align:left;border:1px solid var(--border);background:var(--surface);border-radius:9px;padding:8px 10px;cursor:pointer}
+.choice{display:flex;align-items:center;gap:6px;border:1px solid var(--border);background:var(--surface);border-radius:9px;padding:3px 8px 3px 3px}
 .choice:hover{background:var(--surface-2)}
+.pickbtn{flex:1;min-width:0;display:flex;justify-content:space-between;align-items:center;gap:10px;text-align:left;background:none;border:0;padding:5px 7px;cursor:pointer;color:inherit;font:inherit;border-radius:7px}
+.nowslot{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 10px;border-radius:9px;background:var(--surface-2)}
+.pcard{display:flex;gap:16px;align-items:flex-start}
+.pc-ovr{flex:none;width:78px;height:78px;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--dot-ink);border:3px solid var(--surface);box-shadow:0 2px 10px rgba(0,0,0,.2)}
+.pc-ovr b{font-family:var(--font-display);font-size:34px;line-height:1}
+.pc-ovr span{font-size:10px;font-weight:700;letter-spacing:.8px;opacity:.85}
+.pc-ovr.GK{background:var(--c-gk);color:var(--gk-ink)}.pc-ovr.DEF{background:var(--c-def)}.pc-ovr.MID{background:var(--c-mid)}.pc-ovr.ATT{background:var(--c-att)}
+.pc-main{flex:1;min-width:0}
+.pc-sub{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;margin-top:4px;font-size:13px;color:var(--muted)}
+.pc-kv{display:grid;grid-template-columns:repeat(auto-fit,minmax(92px,1fr));gap:10px 14px;margin-top:14px}
+.pc-kv span{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+.pc-kv b{font-size:15px;font-variant-numeric:tabular-nums}
+.pc-season{margin:16px 0 0;padding:10px 12px;border-radius:10px;background:var(--surface-2);font-size:13.5px;line-height:1.5}
+.pc-season b{font-variant-numeric:tabular-nums}
+tr.hl td{background:var(--hl);font-weight:650}
+@media (max-width:480px){.pc-ovr{width:62px;height:62px}.pc-ovr b{font-size:27px}}
 .choice.on{border-color:var(--strong);box-shadow:0 0 0 1px var(--strong)}
 .choice .muted{display:block;margin-top:2px}
 .choice .rt{font-family:var(--font-display);font-size:21px;font-weight:700;font-variant-numeric:tabular-nums}
@@ -165,6 +181,13 @@ select.dec.changed{border-color:var(--strong);font-weight:600}
 .drow.xi a{font-weight:700}
 .drow b{font-variant-numeric:tabular-nums}
 .drow b.best{color:var(--win)}.drow b.worst{color:var(--loss)}
+.split-read{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:12px 0 8px}
+.split-read span{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+.split-read b{font-family:var(--font-display);font-size:22px;font-variant-numeric:tabular-nums}
+.split-read b.bad{color:var(--err)}
+.split-row{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.split-row input{flex:1;min-width:0;accent-color:var(--strong)}
+@media (max-width:520px){.split-row{flex-wrap:wrap}.split-row input{order:-1;flex-basis:100%}}
 .chips.sub .chip{padding:2px 9px;font-size:12px}
 .pitch.mini{border-width:1px;border-radius:6px}
 .mini .pl-half,.mini .pl-circle,.mini .pl-box{border-width:1px}
@@ -1217,7 +1240,7 @@ function proceedSeason() {
   }
   S.season++;
   const Y = S.season;
-  S.window = { ins: [], outs: [], spent: 0, received: 0, budgetStart: 0 };
+  S.window = { ins: [], outs: [], spent: 0, received: 0, budgetStart: 0, swap: 0 };
   // loans return
   for (const p of onLoan()) { logEvent(p, `Returned from loan at ${clubName(p.loan.club)}`); news.push(`<b>${esc(fullName(p))}</b> is back from loan at ${esc(clubName(p.loan.club))}.`); p.status = 'squad'; p.loan = null; }
   // retirements announced by players
@@ -1320,10 +1343,37 @@ function windowProjection() {
   const wages = staying.reduce((a, p) => a + (String(p.decision).startsWith('renew') ? p.renewWage : p.wage), 0);
   return { available: round1(S.budget + pendingSales), pendingSales, wages, size: staying.length, gks: staying.filter(p => p.pos === 'GK').length, staying };
 }
+/* Budget split: move money between the transfer budget and the weekly wage cap during the window.
+   £1m of transfer budget = £10k/week of wage cap (about two years of that wage). Both directions
+   are permanent: the cap carries into future seasons and grows from its new level. */
+const SWAP_RATE = 10;
+function swapLimits() {
+  const w = windowProjection(), cur = S.window.swap || 0;
+  return { cur, min: cur - Math.max(0, Math.floor((S.wageCap - w.wages) / SWAP_RATE)), max: cur + Math.max(0, Math.floor(w.available)) };
+}
+function setSwap(m) {
+  const { cur, min, max } = swapLimits();
+  m = clamp(Math.round(m), min, max);
+  const d = m - cur; if (!d) return;
+  S.budget = round1(S.budget - d);
+  S.wageCap = Math.round(S.wageCap + d * SWAP_RATE);
+  S.window.swap = m;
+}
+function budgetSplitCard() {
+  const w = windowProjection(), L = swapLimits();
+  const room = S.wageCap - w.wages;
+  return `<div class="card" id="split"><div class="row between"><h2 style="margin:0">Budget split</h2><span class="muted small">£1m of transfer budget = ${wageFmt(SWAP_RATE)}/week of wages</span></div>
+    <div class="split-read"><div><span>Transfer budget</span><b id="split-budget">${money(w.available)}</b></div><div><span>Wage cap</span><b id="split-cap">${wageFmt(S.wageCap)}/wk</b></div><div><span>Wage room</span><b id="split-room" class="${room < 0 ? 'bad' : ''}">${wageFmt(room)}/wk</b></div></div>
+    <div class="split-row"><span class="muted small">More to spend</span>
+      <input type="range" id="swap-range" data-input="swap" data-change="swap" min="${L.min}" max="${L.max}" step="1" value="${L.cur}" aria-label="Move money between transfer budget and wage cap" ${L.min === L.max ? 'disabled' : ''}>
+      <span class="muted small">More for wages</span></div>
+    <div class="row between"><span class="muted small" id="split-note">${L.cur ? (L.cur > 0 ? `This summer: ${money(L.cur)} moved into wages.` : `This summer: ${wageFmt(-L.cur * SWAP_RATE)}/wk moved into the transfer budget.`) : 'Drag to move money between them. Changes are permanent and carry into future seasons.'}</span>
+      ${L.cur ? '<button class="btn btn-sm" data-action="swap-reset">Undo this summer\'s change</button>' : ''}</div></div>`;
+}
 function windowErrors() {
   const w = windowProjection(), e = [];
   if (w.available < 0) e.push(`Transfer budget is overspent by ${money(-w.available)}.`);
-  if (w.wages > S.wageCap) e.push(`Wage bill ${wageFmt(w.wages)}/wk is over the cap of ${wageFmt(S.wageCap)}/wk.`);
+  if (w.wages > S.wageCap) e.push(`Wage bill ${wageFmt(w.wages)}/wk is over the cap of ${wageFmt(S.wageCap)}/wk. Move transfer budget into wages with the Budget split on the Transfers tab, or move players on.`);
   if (w.size < MIN_SQUAD) e.push(`Squad has ${w.size} players — you need at least ${MIN_SQUAD}.`);
   if (w.size > MAX_SQUAD) e.push(`Squad has ${w.size} players — the limit is ${MAX_SQUAD}.`);
   if (w.gks < 2) e.push(`You need at least 2 goalkeepers (you have ${w.gks}). Renew an out-of-contract keeper or sign one in Transfers.`);
@@ -1844,7 +1894,7 @@ function renderTransfers() {
       const why = p.ask > w.available ? 'Not enough budget' : w.wages + p.wageAsk > S.wageCap ? 'Over the wage cap' : w.size >= MAX_SQUAD ? 'Squad full' : '';
       return `<button class="btn btn-sm ${why ? '' : 'btn-primary'}" data-action="buy" data-id="${p.id}" ${why ? `disabled title="${why}"` : ''}>${why || 'Sign'}</button>`; } },
   ];
-  return `<div class="card"><div class="row between"><h2 style="margin:0">Transfer market</h2><span class="muted small">Available: <b>${money(w.available)}</b> · wage room: <b>${wageFmt(Math.max(0, S.wageCap - w.wages))}/wk</b> · squad ${w.size}/${MAX_SQUAD}</span></div>
+  return budgetSplitCard() + `<div class="card"><div class="row between"><h2 style="margin:0">Transfer market</h2><span class="muted small">Available: <b>${money(w.available)}</b> · wage room: <b>${wageFmt(Math.max(0, S.wageCap - w.wages))}/wk</b> · squad ${w.size}/${MAX_SQUAD}</span></div>
     <div style="height:12px"></div>
     <div class="chips">${filters.map(x => `<button class="chip ${f === x ? 'on' : ''}" data-action="posf" data-v="${x}">${x === 'All' ? 'All positions' : x === 'DEF' ? 'Defenders' : x === 'MID' ? 'Midfielders' : x === 'ATT' ? 'Attackers' : 'Goalkeepers'}</button>`).join('')}</div>
     <div class="chips sub">${POS_ORDER.filter(t => t !== 'GK').map(t => `<button class="chip ${f === t ? 'on' : ''}" data-action="posf" data-v="${t}">${t}</button>`).join('')}<span class="muted small" style="align-self:center">Sort by “vs your XI” to see who would start.</span></div>
@@ -2004,9 +2054,9 @@ function pitchHtml(entries, key, mode = 'big') {
     const [, l, px, py] = slots[x.idx];
     const inner = `${mini ? '' : `<span class="lab">${l}</span>`}<span class="dot">${x.num ?? ''}</span><span class="nm">${esc(nm(x.p))}</span>${!mini && x.sub ? `<span class="st">${x.sub}</span>` : ''}`;
     const cls = `pp ${labelGroup(l)} ${x.cls || ''}`, style = `left:${px}%;top:${py}%`;
-    return mode === 'plan'
-      ? `<button class="${cls} clickable" style="${style}" data-action="plan-slot" data-v="${x.idx}" aria-label="${l}: ${esc(fullName(x.p))}, rated ${x.num}. Change player">${inner}</button>`
-      : `<div class="${cls}" style="${style}">${inner}</div>`;
+    if (mode === 'plan') return `<button class="${cls} clickable" style="${style}" data-action="plan-slot" data-v="${x.idx}" aria-label="${l}: ${esc(fullName(x.p))}, rated ${x.num}. Change player or view profile">${inner}</button>`;
+    if (mode === 'big') return `<button class="${cls} clickable" style="${style}" data-action="player" data-id="${x.p.id}"${x.season ? ` data-season="${x.season}"` : ''} aria-label="${l}: ${esc(fullName(x.p))}, rated ${x.num}. Open profile">${inner}</button>`;
+    return `<div class="${cls}" style="${style}">${inner}</div>`;
   };
   return `<div class="pitch ${mini ? 'mini' : ''}"><div class="pl-box top"></div><div class="pl-box bottom"></div><div class="pl-half"></div><div class="pl-circle"></div>${entries.map(one).join('')}</div>`;
 }
@@ -2051,12 +2101,14 @@ function renderPlanXI() {
     const cur = rep.xi.find(x => x.idx === UI.planSlot);
     const cands = list.filter(p => (t === 'GK') === (p.pos === 'GK')).sort((a, b) => effAt(b, t) - effAt(a, t));
     side = `<div class="row between" style="margin-bottom:8px"><h3 style="margin:0">Choose your ${l}</h3><button class="btn btn-sm" data-action="plan-close">Done</button></div>
-      <p class="muted small" style="margin:0 0 8px">Ratings are each player's strength at ${l}. A pinned player starts whenever he's fit; a tired or injured one is rested automatically.</p>
+      ${cur ? `<div class="nowslot"><span>${posCell(cur.p)} <b>${esc(fullName(cur.p))}</b> <span class="muted small">is in this slot now · rated ${Math.round(cur.eff)} here</span></span><button class="btn btn-sm" data-action="player" data-id="${cur.p.id}">Profile</button></div>` : ''}
+      <p class="muted small" style="margin:8px 0">Ratings are each player's strength at ${l}. A pinned player starts whenever he's fit; a tired or injured one is rested automatically.</p>
       <div class="chooser">
-        <button class="choice ${pins[UI.planSlot] ? '' : 'on'}" data-action="plan-auto"><span><b>Let the manager choose</b><span class="muted small">Best available each match</span></span></button>
+        <div class="choice ${pins[UI.planSlot] ? '' : 'on'}"><button class="pickbtn" data-action="plan-auto"><span><b>Let the manager choose</b><span class="muted small">Best available each match</span></span></button></div>
         ${cands.map(p => { const e = Math.round(effAt(p, t)); const inXI = rep.xi.find(x => x.p.id === p.id);
-          return `<button class="choice ${pins[UI.planSlot] === p.id ? 'on' : ''}" data-action="plan-pick" data-id="${p.id}"><span>${posCell(p)} <b>${esc(fullName(p))}</b>
-            <span class="muted small">${age(p)} yrs${posList(p).includes(t) ? '' : ` · out of position (OVR ${Math.round(p.ovr)})`}${inXI && inXI.idx !== UI.planSlot ? ` · starting at ${slots[inXI.idx][1]}` : ''}${cur && cur.p.id === p.id ? ' · in this slot now' : ''}</span></span><span class="rt">${e}</span></button>`; }).join('')}
+          return `<div class="choice ${pins[UI.planSlot] === p.id ? 'on' : ''}"><button class="pickbtn" data-action="plan-pick" data-id="${p.id}" aria-label="Start ${esc(fullName(p))} at ${l}"><span>${posCell(p)} <b>${esc(fullName(p))}</b>
+            <span class="muted small">${age(p)} yrs${posList(p).includes(t) ? '' : ` · out of position (OVR ${Math.round(p.ovr)})`}${inXI && inXI.idx !== UI.planSlot ? ` · starting at ${slots[inXI.idx][1]}` : ''}${cur && cur.p.id === p.id ? ' · in this slot now' : ''}</span></span><span class="rt">${e}</span></button>
+            <button class="btn btn-sm" data-action="player" data-id="${p.id}" aria-label="Profile of ${esc(fullName(p))}">Profile</button></div>`; }).join('')}
       </div>`;
   } else {
     const used = rep.rows.filter(r => r.used).sort((a, b) => a.gap - b.gap);
@@ -2096,13 +2148,13 @@ function renderPastXI() {
   const list = xi.slice().sort((a, b) => GORD.indexOf(labelGroup(sl[a.idx][1])) - GORD.indexOf(labelGroup(sl[b.idx][1])) || sl[b.idx][3] - sl[a.idx][3] || sl[a.idx][2] - sl[b.idx][2]);
   const hi = S.history.indexOf(h);
   const stepper = `<button class="btn btn-sm" data-action="bxi-step" data-v="-1" ${hi <= 0 ? 'disabled' : ''} aria-label="Previous season" title="Previous season (←)">‹ Prev</button>${seasonSel}<button class="btn btn-sm" data-action="bxi-step" data-v="1" ${hi >= S.history.length - 1 ? 'disabled' : ''} aria-label="Next season" title="Next season (→)">Next ›</button>`;
-  const entries = xi.map(x => ({ idx: x.idx, p: x.p, num: x.r.ovr, sub: `${x.r.apps} apps · ${fmtAvg(x.r.avg)} avg` }));
+  const entries = xi.map(x => ({ idx: x.idx, p: x.p, num: x.r.ovr, sub: `${x.r.apps} apps · ${fmtAvg(x.r.avg)} avg`, season: h.season }));
   let html = `<div class="card" id="bxi-top"><div class="row between"><h2 style="margin:0">Best XI · ${h.label}</h2><div class="row">${stepper}${formSel}</div></div>
-    <p class="muted small" style="margin:6px 0 14px">${esc(key)}${key === own ? ' (the formation played that season)' : ` · that season was played in ${esc(own)}`}. Picked on average match rating and appearances, favouring players who played the position. Circles show each player's rating (OVR) that season.</p>
+    <p class="muted small" style="margin:6px 0 14px">${esc(key)}${key === own ? ' (the formation played that season)' : ` · that season was played in ${esc(own)}`}. Picked on average match rating and appearances, favouring players who played the position. Circles show each player's rating (OVR) that season; click one for his profile.</p>
     <div class="bxi-main"><div>${pitchHtml(entries, key, 'big')}${unitKey}</div>
       <div style="min-width:0">${table('bxi', [
         { k: 'pos', l: 'Pos', f: x => `<span class="pos ${POS_GROUP[x.slot]}">${formOf(key).slots[x.idx][1]}</span>` },
-        { k: 'name', l: 'Player', cls: 'name', f: x => `<a href="#" data-action="player" data-id="${x.p.id}">${esc(fullName(x.p))}</a>${posList(x.p).includes(x.slot) ? '' : ' <span class="tag warn">out of pos.</span>'}` },
+        { k: 'name', l: 'Player', cls: 'name', f: x => `<a href="#" data-action="player" data-id="${x.p.id}" data-season="${h.season}">${esc(fullName(x.p))}</a>${posList(x.p).includes(x.slot) ? '' : ' <span class="tag warn">out of pos.</span>'}` },
         { k: 'ovr', l: 'OVR', n: 1, f: x => `<b>${x.r.ovr}</b>`, title: 'Rating that season' }, { k: 'age', l: 'Age', n: 1, f: x => x.r.age },
         { k: 'apps', l: 'Apps', n: 1, f: x => x.r.apps }, { k: 'g', l: 'G', n: 1, f: x => x.r.goals }, { k: 'a', l: 'A', n: 1, f: x => x.r.assists },
         { k: 'avg', l: 'Avg', n: 1, f: x => fmtAvg(x.r.avg), title: 'Average match rating' }, { k: 'played', l: 'Played at', f: x => `<span class="muted small">${playedStr(x.r.posPlayed)}</span>` }], list, { nosort: true })}
@@ -2235,20 +2287,25 @@ function renderModal() {
   const t = careerTotals(p);
   const rows = p.seasons.slice().reverse().map(r => ({ ...r, label: seasonLabel(r.season), clubN: clubName(r.club) }));
   const honours = [...p.trophies.map(x => `🏆 ${x.name} (${seasonLabel(x.season)})`), ...p.awards.map(x => `★ ${x.name} (${seasonLabel(x.season)})`)];
+  // the season this card was opened from (Best XI), otherwise his most recent season
+  const focus = (UI.modalSeason && p.seasons.find(r => r.season === UI.modalSeason && !r.loan)) || p.seasons[p.seasons.length - 1];
+  const here = p.status !== 'left';
+  const seasonLine = focus ? `<div class="pc-season"><b>${seasonLabel(focus.season)}</b>${focus.club !== NU ? ` on loan at ${esc(clubName(focus.club))}` : ''} · OVR <b>${focus.ovr}</b> · ${focus.apps} apps (${focus.starts} starts) · <b>${focus.goals}</b> goals · <b>${focus.assists}</b> assists · avg rating <b>${fmtAvg(focus.avg)}</b> · ${focus.potm} POTM${focus.posPlayed ? ` · played ${playedStr(focus.posPlayed)}` : ''}</div>` : '';
   el.innerHTML = `<div class="modal-bg" data-action="close-bg"><div class="modal" role="dialog" aria-label="${esc(fullName(p))}">
-    <div class="row between"><div class="row">${posCell(p)}<h2>${esc(fullName(p))}</h2></div><button class="btn btn-sm" data-action="close">Close ✕</button></div>
-    <div class="facts">
-      <div><span>Nationality</span>${p.nat}</div><div><span>Born</span>${p.born} (age ${age(p)})</div>
-      <div><span>Current OVR</span>${Math.round(p.ovr)} <span class="muted">(peak ${p.peak})</span></div>
-      <div><span>Potential</span>${potLabel(p)}</div>
-      <div><span>Joined</span>${esc(joinedText(p))}</div><div><span>Status</span>${leftText(p)}</div>
-      ${p.status !== 'left' ? `<div><span>Contract</span>${contractCell(p)} · ${wageFmt(p.wage)}/wk</div><div><span>Value</span>${money(marketValue(p))}</div>` : ''}
-      <div><span>Club totals</span>${t.apps} apps · ${t.goals} G · ${t.assists} A</div>
-    </div>
+    <div class="pcard"><div class="pc-ovr ${POS_GROUP[p.pos]}"><b>${Math.round(p.ovr)}</b><span>OVR</span></div>
+      <div class="pc-main"><div class="row between" style="flex-wrap:nowrap;align-items:flex-start"><h2>${esc(fullName(p))}</h2><button class="btn btn-sm" data-action="close">Close ✕</button></div>
+        <div class="pc-sub">${posCell(p)}<span>${p.nat} · age ${age(p)} · born ${p.born}</span>${leftText(p)}</div>
+        <div class="pc-kv">
+          <div><span>Potential</span><b>${potLabel(p)}</b></div><div><span>Peak OVR</span><b>${p.peak}</b></div>
+          ${here ? `<div><span>Value</span><b>${money(marketValue(p))}</b></div><div><span>Wage</span><b>${wageFmt(p.wage)}/wk</b></div><div><span>Contract</span><b>${contractCell(p)}</b></div>` : ''}
+          <div><span>For the club</span><b>${t.apps} apps · ${t.goals} G · ${t.assists} A</b></div>
+        </div></div></div>
+    ${seasonLine}
+    <div class="facts"><div><span>Joined</span>${esc(joinedText(p))}</div>${p.left ? `<div><span>Left</span>${leftText(p)}</div>` : ''}${t.avg ? `<div><span>Career avg rating</span>${fmtAvg(t.avg)}</div>` : ''}</div>
     ${honours.length ? `<h3 style="margin:10px 0 6px;font-size:12px;text-transform:uppercase;color:var(--muted)">Honours</h3><div class="trophies">${honours.map(h => `<span class="trophy" style="font-size:12.5px">${esc(h)}</span>`).join('')}</div>` : ''}
     <h3 style="margin:16px 0 6px;font-size:12px;text-transform:uppercase;color:var(--muted)">Season by season</h3>
     ${table('pm', [{ k: 'label', l: 'Season' }, { k: 'clubN', l: 'Club', f: r => esc(r.clubN) + (r.loan ? ' <span class="tag warn">loan</span>' : '') }, { k: 'age', l: 'Age', n: 1 }, { k: 'ovr', l: 'OVR', n: 1 },
-      { k: 'apps', l: 'Apps', n: 1, f: r => `${r.starts}${r.subs ? ` <span class="muted">(${r.subs})</span>` : ''}` }, { k: 'mins', l: 'Mins', n: 1 }, { k: 'goals', l: 'G', n: 1 }, { k: 'assists', l: 'A', n: 1 }, { k: 'yc', l: 'YC', n: 1 }, { k: 'rc', l: 'RC', n: 1 }, { k: 'avg', l: 'Avg', n: 1, f: r => fmtAvg(r.avg) }, { k: 'potm', l: 'POTM', n: 1 }], rows, { nosort: true })}
+      { k: 'apps', l: 'Apps', n: 1, f: r => `${r.starts}${r.subs ? ` <span class="muted">(${r.subs})</span>` : ''}` }, { k: 'mins', l: 'Mins', n: 1 }, { k: 'goals', l: 'G', n: 1 }, { k: 'assists', l: 'A', n: 1 }, { k: 'yc', l: 'YC', n: 1 }, { k: 'rc', l: 'RC', n: 1 }, { k: 'avg', l: 'Avg', n: 1, f: r => fmtAvg(r.avg) }, { k: 'potm', l: 'POTM', n: 1 }], rows, { nosort: true, rowClass: r => focus && r.season === focus.season && r.club === focus.club ? 'hl' : '' })}
     <h3 style="margin:16px 0 6px;font-size:12px;text-transform:uppercase;color:var(--muted)">Timeline</h3>
     <ul class="news">${[`<li><b>${p.joined.season}</b> · ${esc(joinedText(p))}</li>`, ...p.events.filter(e => !/^Signed from|^Signed as a free|^Promoted from/.test(e.text)).map(e => `<li><b>${e.season}</b> · ${esc(e.text)}</li>`)].join('')}</ul>
   </div></div>`;
@@ -2381,9 +2438,10 @@ document.addEventListener('click', e => {
       pins[UI.planSlot] = id; S.lineups[S.settings.formation] = pins; UI.planSlot = null; save(); render(); break;
     }
     case 'plan-clear': S.lineups[S.settings.formation] = {}; UI.planSlot = null; save(); render(); break;
+    case 'swap-reset': setSwap(0); save(); render(); break;
     case 'market-pos': UI.tab = 'transfers'; UI.posFilter = el.dataset.v; render(); window.scrollTo(0, 0); break;
-    case 'player': UI.modal = +el.dataset.id; renderModal(); break;
-    case 'close': case 'close-bg': UI.modal = null; renderModal(); break;
+    case 'player': UI.modal = +el.dataset.id; UI.modalSeason = el.dataset.season ? +el.dataset.season : null; renderModal(); break;
+    case 'close': case 'close-bg': UI.modal = null; UI.modalSeason = null; renderModal(); break;
     case 'export': exportXlsx(); break;
     case 'savefile': download(`the-gaffer-${fileTag()}-${seasonAscii(S.season)}.json`, JSON.stringify(S), 'application/json'); break;
     case 'loadfile': document.getElementById('loadfile').click(); break;
@@ -2395,6 +2453,15 @@ document.addEventListener('click', e => {
     case 'pick-start': if (UI.pickClub && UI.cloudChecked) { newGame(false, UI.pickClub); UI.picker = false; render(); window.scrollTo(0, 0); } break;
   }
 });
+document.addEventListener('input', e => {
+  const el = e.target;
+  if (el.dataset.input !== 'swap' || !S) return;
+  const L = swapLimits(), d = +el.value - L.cur, w = windowProjection();
+  const set = (id, v) => { const n = document.getElementById(id); if (n) n.textContent = v; };
+  set('split-budget', money(round1(w.available - d)));
+  set('split-cap', wageFmt(S.wageCap + d * SWAP_RATE) + '/wk');
+  set('split-room', wageFmt(S.wageCap + d * SWAP_RATE - w.wages) + '/wk');
+});
 document.addEventListener('change', e => {
   const el = e.target;
   if (el.dataset.change === 'decide') { const p = S.players[+el.dataset.id]; if (p) { p.decision = el.value; save(); render(); } }
@@ -2402,6 +2469,7 @@ document.addEventListener('change', e => {
   if (el.dataset.change === 'formation') { S.settings.formation = el.value; UI.planSlot = null; save(); render(); }
   if (el.dataset.change === 'bxi-form') { UI.bxiForm = el.value; render(); }
   if (el.dataset.change === 'bxi-season') { UI.bxiSeason = +el.value; render(); }
+  if (el.dataset.change === 'swap') { setSwap(+el.value); save(); render(); }
   if (el.dataset.change === 'luck') { S.settings.luck = el.value; save(); render(); }
   if (el.dataset.change === 'autofill') { S.settings.autoFill = el.checked; if (el.checked) applyRecommendations(); save(); render(); }
 });
