@@ -1299,6 +1299,7 @@ function depart(p, how, club, fee) {
 function clubPool(divs) { return Object.values(S.clubs).filter(c => divs.includes(c.div)); }
 function pickClubNear(target, divs, spread = 2.5) { return weightedPick(clubPool(divs), c => Math.exp(-Math.abs(c.rating - target) / spread)).id; }
 function prepareWindow() {
+  UI.recNote = null;
   for (const p of squad()) {
     p.decision = p.contractEnd < S.season ? 'leave' : 'keep';
     p.quote = p.contractEnd < S.season ? null : { club: pickClubNear(p.ovr + 1, ['PL', 'EU', 'CH']), fee: round1(marketValue(p) * rfloat(0.9, 1.2)) };
@@ -1762,7 +1763,17 @@ function recommend() {
   trim(byWage(staying().filter(p => !xiIds.has(p.id))), 18, p => p.contractEnd < S.season ? 'leave' : 'release', 'Over the wage cap: release to free up wages');
   return recs;
 }
-function applyRecommendations() { const recs = recommend(); for (const p of squad()) if (recs[p.id]) p.decision = recs[p.id].d; }
+function applyRecommendations() {
+  const recs = recommend(); for (const p of squad()) if (recs[p.id]) p.decision = recs[p.id].d;
+  // if the plan is still over the wage cap, cover the gap from the transfer budget (Budget split)
+  UI.recNote = null;
+  const w = windowProjection(), short = w.wages - S.wageCap;
+  if (short > 0) {
+    const need = Math.ceil(short / SWAP_RATE) + 1, L = swapLimits();
+    if (L.max - L.cur >= need) { setSwap(L.cur + need); UI.recNote = `Moved ${money(need)} of transfer budget into wages to keep the plan under the wage cap.`; }
+    else UI.recNote = `Still ${wageFmt(short)}/wk over the wage cap and there isn't enough transfer budget to cover it: move some players on.`;
+  }
+}
 function resetDecisions() { for (const p of squad()) p.decision = p.contractEnd < S.season ? 'leave' : 'keep'; }
 function contractCell(p) {
   const y = p.contractEnd - S.season;
@@ -1820,6 +1831,7 @@ function renderSquad() {
       <div class="toolbar">
         <button class="btn btn-sm btn-primary" data-action="apply-recs" ${differ ? '' : 'disabled'}>Use all recommendations${differ ? ` (${differ} change${differ > 1 ? 's' : ''})` : ''}</button>
         <button class="btn btn-sm" data-action="reset-decs">Reset all to Keep</button>
+        ${UI.recNote ? `<span class="small">${esc(UI.recNote)}</span>` : ''}
         <span class="spacer"></span>
         <label for="autofill"><input type="checkbox" id="autofill" data-change="autofill" ${S.settings.autoFill ? 'checked' : ''}> Pre-fill recommendations every summer</label>
       </div>
