@@ -155,6 +155,9 @@ select.dec.changed{border-color:var(--strong);font-weight:600}
 .choice{display:flex;align-items:center;gap:6px;border:1px solid var(--border);background:var(--surface);border-radius:9px;padding:3px 8px 3px 3px}
 .choice:hover{background:var(--surface-2)}
 .pickbtn{flex:1;min-width:0;display:flex;justify-content:space-between;align-items:center;gap:10px;text-align:left;background:none;border:0;padding:5px 7px;cursor:pointer;color:inherit;font:inherit;border-radius:7px}
+.linkbtn{background:none;border:0;padding:0;font:inherit;font-weight:650;color:inherit;cursor:pointer;text-decoration:underline;text-decoration-color:var(--border);text-underline-offset:3px}
+.linkbtn:hover{text-decoration-color:currentColor}
+.pc-slot{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px;margin-top:14px;padding:10px 12px;border-radius:10px;border:1px solid var(--border)}
 .nowslot{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 10px;border-radius:9px;background:var(--surface-2)}
 .pcard{display:flex;gap:16px;align-items:flex-start}
 .pc-ovr{flex:none;width:78px;height:78px;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--dot-ink);border:3px solid var(--surface);box-shadow:0 2px 10px rgba(0,0,0,.2)}
@@ -2066,7 +2069,7 @@ function pitchHtml(entries, key, mode = 'big') {
     const [, l, px, py] = slots[x.idx];
     const inner = `${mini ? '' : `<span class="lab">${l}</span>`}<span class="dot">${x.num ?? ''}</span><span class="nm">${esc(nm(x.p))}</span>${!mini && x.sub ? `<span class="st">${x.sub}</span>` : ''}`;
     const cls = `pp ${labelGroup(l)} ${x.cls || ''}`, style = `left:${px}%;top:${py}%`;
-    if (mode === 'plan') return `<button class="${cls} clickable" style="${style}" data-action="plan-slot" data-v="${x.idx}" aria-label="${l}: ${esc(fullName(x.p))}, rated ${x.num}. Change player or view profile">${inner}</button>`;
+    if (mode === 'plan') return `<button class="${cls} clickable" style="${style}" data-action="player" data-id="${x.p.id}" data-slot="${x.idx}" aria-label="${l}: ${esc(fullName(x.p))}, rated ${x.num}. Open profile">${inner}</button>`;
     if (mode === 'big') return `<button class="${cls} clickable" style="${style}" data-action="player" data-id="${x.p.id}"${x.season ? ` data-season="${x.season}"` : ''} aria-label="${l}: ${esc(fullName(x.p))}, rated ${x.num}. Open profile">${inner}</button>`;
     return `<div class="${cls}" style="${style}">${inner}</div>`;
   };
@@ -2127,16 +2130,16 @@ function renderPlanXI() {
     side = `<h3 style="margin:0 0 8px">Positions, weakest first</h3>
       ${table('posrep', [
         { k: 't', l: 'Pos', f: r => `<span class="pos ${POS_GROUP[r.t]}">${r.t}</span>${r.used > 1 ? `<span class="altpos">×${r.used}</span>` : ''}` },
-        { k: 'st', l: 'Starter', cls: 'name', f: r => r.starters.map(x => esc(x.p.last)).join(', ') || '—' },
+        { k: 'st', l: 'Starter', cls: 'name', f: r => r.starters.map(x => `<button class="linkbtn" data-action="plan-slot" data-v="${x.idx}" title="Choose who starts at ${slots[x.idx][1]}">${esc(x.p.last)}</button>`).join(', ') || '—' },
         { k: 'r', l: 'Rating', n: 1, f: r => `<b>${Math.round(r.startEff)}</b> <span class="muted small">${r.gap >= 0 ? '+' : ''}${r.gap.toFixed(1)}</span>` },
         { k: 's', l: 'Status', f: r => `<span class="${STATUS_TAG[r.status]}">${r.status}</span>${r.thin ? ' <span class="tag warn">Thin cover</span>' : ''}` },
         { k: 'd', l: 'Depth', n: 1, f: r => r.able.length },
         { k: 'm', l: '', f: r => S.phase === 'window' && (r.status === 'Weak spot' || r.status === 'Below par' || r.thin) ? `<button class="btn btn-sm" data-action="market-pos" data-v="${r.t}">Find a ${r.t}</button>` : '' }], used, { nosort: true })}
-      <p class="muted small">Rating is the starter's strength at that position; the number beside it is the gap to your XI average (${rep.avg.toFixed(1)}). Click a player on the pitch to choose who starts there.</p>`;
+      <p class="muted small">Rating is the starter's strength at that position; the number beside it is the gap to your XI average (${rep.avg.toFixed(1)}). Click a player on the pitch for his profile, or a name in the Starter column to choose who starts there.</p>`;
   }
   let html = `<div class="card" id="bxi-top"><div class="row between"><h2 style="margin:0">Your XI · ${season}</h2>
       <div class="row"><label class="muted small" for="plan-form">Formation</label>${formationSelect('plan-form', 'formation', key)}${pinned ? `<button class="btn btn-sm" data-action="plan-clear">Unpin all (${pinned})</button>` : ''}</div></div>
-    <p class="muted small" style="margin:6px 0 14px">${pinned ? `${pinned} pinned, the rest picked automatically` : 'Picked automatically from your squad'}${S.phase === 'window' ? ', after your summer decisions' : ''}. Numbers are each player's rating in that position; a red ring marks a weak link.</p>
+    <p class="muted small" style="margin:6px 0 14px">${pinned ? `${pinned} pinned, the rest picked automatically` : 'Picked automatically from your squad'}${S.phase === 'window' ? ', after your summer decisions' : ''}. Numbers are each player's rating in that position; a red ring marks a weak link. Click a player for his profile and to change or pin him.</p>
     <div class="bxi-main"><div>${pitchHtml(entries, key, 'plan')}${unitKey}</div><div style="min-width:0">${side}</div></div></div>`;
   // depth chart: every position, best to worst
   const order = rep.rows.slice().sort((a, b) => (b.used ? 1 : 0) - (a.used ? 1 : 0) || POS_ORDER.indexOf(a.t) - POS_ORDER.indexOf(b.t));
@@ -2292,6 +2295,14 @@ function renderData() {
 }
 
 /* ---------------- player modal ---------------- */
+// shown on a profile opened from the Your XI pitch: his slot, plus change / pin controls
+function xiStrip(p) {
+  if (UI.modalSlot == null || UI.tab !== 'bestxi') return '';
+  const key = S.settings.formation, slot = formOf(key).slots[UI.modalSlot]; if (!slot) return '';
+  const l = slot[1], pinned = pinsFor(key)[UI.modalSlot] === p.id;
+  return `<div class="pc-slot"><span>Starting at <b>${l}</b> in your ${esc(key)} · rated <b>${Math.round(effAt(p, slot[0]))}</b> there${pinned ? ' · <b>pinned</b>' : ' · picked automatically'}</span>
+    <span class="row"><button class="btn btn-sm" data-action="modal-change">Change ${l}</button>${pinned ? '<button class="btn btn-sm" data-action="modal-unpin">Unpin</button>' : '<button class="btn btn-sm btn-primary" data-action="modal-pin">Pin him here</button>'}</span></div>`;
+}
 function renderModal() {
   const el = document.getElementById('modal');
   if (!UI.modal) { el.innerHTML = ''; return; }
@@ -2313,6 +2324,7 @@ function renderModal() {
           <div><span>For the club</span><b>${t.apps} apps · ${t.goals} G · ${t.assists} A</b></div>
         </div></div></div>
     ${seasonLine}
+    ${xiStrip(p)}
     <div class="facts"><div><span>Joined</span>${esc(joinedText(p))}</div>${p.left ? `<div><span>Left</span>${leftText(p)}</div>` : ''}${t.avg ? `<div><span>Career avg rating</span>${fmtAvg(t.avg)}</div>` : ''}</div>
     ${honours.length ? `<h3 style="margin:10px 0 6px;font-size:12px;text-transform:uppercase;color:var(--muted)">Honours</h3><div class="trophies">${honours.map(h => `<span class="trophy" style="font-size:12.5px">${esc(h)}</span>`).join('')}</div>` : ''}
     <h3 style="margin:16px 0 6px;font-size:12px;text-transform:uppercase;color:var(--muted)">Season by season</h3>
@@ -2452,8 +2464,15 @@ document.addEventListener('click', e => {
     case 'plan-clear': S.lineups[S.settings.formation] = {}; UI.planSlot = null; save(); render(); break;
     case 'swap-reset': setSwap(0); save(); render(); break;
     case 'market-pos': UI.tab = 'transfers'; UI.posFilter = el.dataset.v; render(); window.scrollTo(0, 0); break;
-    case 'player': UI.modal = +el.dataset.id; UI.modalSeason = el.dataset.season ? +el.dataset.season : null; renderModal(); break;
-    case 'close': case 'close-bg': UI.modal = null; UI.modalSeason = null; renderModal(); break;
+    case 'player': UI.modal = +el.dataset.id; UI.modalSeason = el.dataset.season ? +el.dataset.season : null; UI.modalSlot = el.dataset.slot != null ? +el.dataset.slot : null; renderModal(); break;
+    case 'close': case 'close-bg': UI.modal = null; UI.modalSeason = null; UI.modalSlot = null; renderModal(); break;
+    case 'modal-change': UI.planSlot = UI.modalSlot; UI.modal = null; UI.modalSlot = null; render(); document.getElementById('bxi-top')?.scrollIntoView({ block: 'start' }); break;
+    case 'modal-pin': case 'modal-unpin': {
+      const key = S.settings.formation, pins = { ...pinsFor(key) };
+      Object.keys(pins).forEach(k => { if (pins[k] === UI.modal) delete pins[k]; });
+      if (a === 'modal-pin') pins[UI.modalSlot] = UI.modal;
+      S.lineups[key] = pins; save(); render(); break;
+    }
     case 'export': exportXlsx(); break;
     case 'savefile': download(`the-gaffer-${fileTag()}-${seasonAscii(S.season)}.json`, JSON.stringify(S), 'application/json'); break;
     case 'loadfile': document.getElementById('loadfile').click(); break;
