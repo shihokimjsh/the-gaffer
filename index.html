@@ -142,14 +142,34 @@ select.dec.changed{border-color:var(--strong);font-weight:600}
 .pl-box{position:absolute;left:24%;right:24%;height:13%;border:2px solid var(--pitch-line)}
 .pl-box.top{top:-2px}.pl-box.bottom{bottom:-2px}
 .pp{position:absolute;transform:translate(-50%,-30%);display:flex;flex-direction:column;align-items:center;gap:2px;width:88px;text-align:center;pointer-events:none}
-.pp .dot{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;font-size:11px;font-weight:700;color:var(--dot-ink);border:2px solid var(--surface);box-shadow:0 1px 3px rgba(0,0,0,.25)}
+.pp .dot{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;font-size:13px;font-variant-numeric:tabular-nums;font-weight:700;color:var(--dot-ink);border:2px solid var(--surface);box-shadow:0 1px 3px rgba(0,0,0,.25)}
 .pp.GK .dot{background:var(--c-gk);color:var(--gk-ink)}.pp.DEF .dot{background:var(--c-def)}.pp.MID .dot{background:var(--c-mid)}.pp.ATT .dot{background:var(--c-att)}
 .pp .nm{font-size:12.5px;font-weight:700;line-height:1.1;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pp .st{font-size:10.5px;color:var(--muted);white-space:nowrap}
+.pp .lab{font-size:9.5px;font-weight:700;letter-spacing:.5px;color:var(--muted);line-height:1}
+.pp.clickable{pointer-events:auto;cursor:pointer;background:none;border:0;padding:2px;font:inherit;color:inherit;border-radius:8px}
+.pp.clickable:hover .dot{transform:scale(1.08)}
+.pp.weak .dot{box-shadow:0 0 0 3px var(--loss)}
+.pp.sel .dot{box-shadow:0 0 0 3px var(--strong)}
+.chooser{display:flex;flex-direction:column;gap:6px;max-height:560px;overflow-y:auto;padding-right:2px}
+.choice{display:flex;justify-content:space-between;align-items:center;gap:10px;text-align:left;border:1px solid var(--border);background:var(--surface);border-radius:9px;padding:8px 10px;cursor:pointer}
+.choice:hover{background:var(--surface-2)}
+.choice.on{border-color:var(--strong);box-shadow:0 0 0 1px var(--strong)}
+.choice .muted{display:block;margin-top:2px}
+.choice .rt{font-family:var(--font-display);font-size:21px;font-weight:700;font-variant-numeric:tabular-nums}
+.depth{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
+.dcard{border:1px solid var(--border);border-radius:10px;padding:10px 12px;background:var(--surface)}
+.dcard.unused{opacity:.72}
+.dcard > .row.between{margin-bottom:6px}
+.drow{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:13px;padding:4px 0;border-top:1px solid var(--border)}
+.drow.xi a{font-weight:700}
+.drow b{font-variant-numeric:tabular-nums}
+.drow b.best{color:var(--win)}.drow b.worst{color:var(--loss)}
+.chips.sub .chip{padding:2px 9px;font-size:12px}
 .pitch.mini{border-width:1px;border-radius:6px}
 .mini .pl-half,.mini .pl-circle,.mini .pl-box{border-width:1px}
 .mini .pp{width:46px;gap:1px;transform:translate(-50%,-25%)}
-.mini .pp .dot{width:11px;height:11px;border-width:1px}
+.mini .pp .dot{width:16px;height:16px;border-width:1px;font-size:8px}
 .mini .pp .nm{font-size:8.5px;font-weight:650}
 .bxi-main{display:grid;grid-template-columns:minmax(0,440px) minmax(0,1fr);gap:20px;align-items:start}
 @media (max-width:760px){.bxi-main{grid-template-columns:minmax(0,1fr)}}
@@ -530,7 +550,7 @@ function marketValue(p, season = S.season) {
 }
 function potLabel(p) {
   if (age(p) > 24) return '—';
-  const e = clamp(p.pot + p.potErr, Math.round(p.ovr), 95);
+  const e = Math.round(clamp(p.pot + p.potErr, Math.round(p.ovr), 95));
   return `${Math.max(Math.round(p.ovr), e - 2)}–${Math.min(95, e + 2)}`;
 }
 function logEvent(p, text) { p.events.push({ season: S.season, text }); }
@@ -543,7 +563,7 @@ function assignSlots(cands, types, val) {
   const order = types.map((t, i) => i).sort((a, b) => SLOT_PRI.indexOf(types[a]) - SLOT_PRI.indexOf(types[b]));
   for (const i of order) {
     let best = null, bs = -1e9;
-    for (const p of left) { const s = val(p, types[i]); if (s > bs) { bs = s; best = p; } }
+    for (const p of left) { const s = val(p, types[i], i); if (s > bs) { bs = s; best = p; } }
     if (!best) break;
     left.splice(left.indexOf(best), 1);
     xi.push({ p: best, slot: types[i], idx: i });
@@ -552,21 +572,26 @@ function assignSlots(cands, types, val) {
     let changed = false;
     for (let i = 0; i < xi.length; i++) for (let j = i + 1; j < xi.length; j++) {
       const a = xi[i], b = xi[j];
-      if (val(a.p, b.slot) + val(b.p, a.slot) > val(a.p, a.slot) + val(b.p, b.slot) + 0.01) { [a.p, b.p] = [b.p, a.p]; changed = true; }
+      if (val(a.p, b.slot, b.idx) + val(b.p, a.slot, a.idx) > val(a.p, a.slot, a.idx) + val(b.p, b.slot, b.idx) + 0.01) { [a.p, b.p] = [b.p, a.p]; changed = true; }
     }
     for (const x of xi) for (let k = 0; k < left.length; k++) {
-      if (val(left[k], x.slot) > val(x.p, x.slot) + 0.01) { const out = x.p; x.p = left[k]; left[k] = out; changed = true; }
+      if (val(left[k], x.slot, x.idx) > val(x.p, x.slot, x.idx) + 0.01) { const out = x.p; x.p = left[k]; left[k] = out; changed = true; }
     }
     if (!changed) break;
   }
   xi.sort((a, b) => a.idx - b.idx);
   return { xi, rest: left };
 }
-function pickXI(avail, nf, types = formTypes()) {
-  const { xi, rest: left } = assignSlots(avail, types, (p, slot) => p.ovr * fitP(p, slot) + nf(p));
+// pins: {slotIndex: playerId} chosen by you for a formation; pinBonus is how hard the pick leans on them
+function pickXI(avail, nf, types = formTypes(), pins = null, pinBonus = 0) {
+  const pb = typeof pinBonus === 'function' ? pinBonus : () => pinBonus;
+  const { xi, rest: left } = assignSlots(avail, types, (p, slot, idx) => p.ovr * fitP(p, slot) + nf(p) + (pins && pins[idx] === p.id ? pb(p) : 0));
   xi.forEach(x => x.eff = x.p.ovr * fitP(x.p, x.slot));
   return { xi, rest: left };
 }
+const pinsFor = key => (S.lineups && S.lineups[key]) || {};
+// Your planned XI: pinned players always take their slot (if still in the squad), the rest are auto-picked.
+const planXI = (list, key = S.settings.formation) => pickXI(list, () => 0, formTypes(key), pinsFor(key), 50);
 /* Team strength by unit. Each unit is its average, pulled down by its weakest player
    (a hole in the back four costs more than the average shows). Attack and defence then
    combine the units, and goals come from our attack against their defence and vice versa. */
@@ -636,7 +661,8 @@ function nuMatch(ctx, oppId, venue, comp, label, koLevel) {
     while (avail.length < 11 && extra.length) avail.push(extra.shift());
   }
   const nf = p => noise.get(p.id) || 0;
-  const { xi, rest } = pickXI(avail, nf, formTypes(ctx.formation));
+  // a pinned player starts unless he's injured, suspended, worn out (heavy fatigue) or it's a cup rotation game
+  const { xi, rest } = pickXI(avail, nf, formTypes(ctx.formation), pinsFor(ctx.formation), p => rotate ? 4 : (p._fat || 0) > 1.7 ? 0 : 30);
   const bench = [];
   for (const b of rest.slice().sort((a, b) => (b.ovr + nf(b)) - (a.ovr + nf(a)))) {
     if (bench.length >= 9) break;
@@ -1337,7 +1363,7 @@ function newGame(fresh = false, club = 'Newcastle United') {
   USED_NAMES.clear();
   const start = clubStart(club);
   S = { v: 1, my: { name: club }, season: START_YEAR, phase: 'window', nextId: 1, clubs: {}, divisions: { PL: [NU], CH: [], L1: [], L2: [], NL: [] }, players: {}, market: [],
-    settings: { luck: 'random', autoFill: false, formation: '4-3-3' }, budget: start.budget, wageCap: 0, euro: start.euro, nextEuro: null, lastPLOrder: [], history: [], news: [], window: { ins: [], outs: [], spent: 0, received: 0, budgetStart: start.budget } };
+    settings: { luck: 'random', autoFill: false, formation: '4-3-3' }, lineups: {}, budget: start.budget, wageCap: 0, euro: start.euro, nextEuro: null, lastPLOrder: [], history: [], news: [], window: { ins: [], outs: [], spent: 0, received: 0, budgetStart: start.budget } };
   const add = (name, r, div, country) => { const id = slug(name); S.clubs[id] = { id, name, rating: r, base: r, div, country, bias: round1(clamp(gauss(0, 1.3), -2.5, 2.5)) }; if (div !== 'EU') S.divisions[div].push(id); };
   PL_CLUBS.forEach(([n, r]) => add(n, r, 'PL', 'ENG'));
   CH_CLUBS.forEach(([n, r]) => add(n, r, 'CH', 'ENG'));
@@ -1368,7 +1394,7 @@ function newGame(fresh = false, club = 'Newcastle United') {
     `The board has set a transfer budget of <b>${money(S.budget)}</b> and a wage cap of <b>${wageFmt(S.wageCap)}/week</b>.`,
     `Set a decision for each player in the squad, sign players in the Transfers tab, then press <b>Play season</b>.`
   ];
-  UI.tab = 'squad'; UI.viewSeason = null; UI.bxiSeason = null; UI.bxiForm = null; UI.modal = null;
+  UI.tab = 'squad'; UI.viewSeason = null; UI.bxiSeason = null; UI.bxiForm = null; UI.bxiMode = null; UI.planSlot = null; UI.modal = null; UI.posFilter = 'All'; UI.picker = false;
   if (fresh) S.savedAt = 0; else save();
 }
 
@@ -1452,6 +1478,7 @@ function updateSaveStatus() {
 function adoptState(data) {
   S = data;
   S.settings = Object.assign({ luck: 'random', autoFill: false, formation: '4-3-3' }, S.settings || {});
+  S.lineups = S.lineups || {};
   if (!S.divisions.L2) {
     S.divisions.L2 = []; S.divisions.NL = [];
     [[L2_CLUBS, 'L2'], [NL_CLUBS, 'NL']].forEach(([list, d]) => list.forEach(([name, r]) => { const id = slug(name); S.clubs[id] = { id, name, rating: r, base: r, div: d, country: 'ENG', bias: 0 }; S.divisions[d].push(id); }));
@@ -1590,7 +1617,7 @@ const decClass = d => d.startsWith('renew') ? 'renew' : d;
 function recommend() {
   const sq = squad(), recs = {};
   if (!sq.length) return recs;
-  const { xi } = pickXI(sq, () => 0);
+  const { xi } = planXI(sq);
   const xiIds = new Set(xi.map(x => x.p.id));
   const xiAvg = xi.reduce((a, x) => a + x.p.ovr, 0) / xi.length;
   const prev = S.season - 1;
@@ -1788,7 +1815,16 @@ function renderTransfers() {
   }
   const w = windowProjection();
   const filters = ['All', 'GK', 'DEF', 'MID', 'ATT'];
-  const list = S.market.filter(p => UI.posFilter === 'All' || POS_GROUP[p.pos] === UI.posFilter);
+  const f = UI.posFilter;
+  const list = S.market.filter(p => f === 'All' || (POS_ORDER.includes(f) ? posList(p).includes(f) : POS_GROUP[p.pos] === f));
+  // how each target compares with your planned starter at the positions he can play in your formation
+  const key = S.settings.formation, plan = planXI(w.staying, key).xi;
+  const starterAt = {}; plan.forEach(x => starterAt[x.slot] = Math.min(starterAt[x.slot] ?? 99, x.eff));
+  const upgrade = p => {
+    let best = null;
+    posList(p).forEach(t => { if (starterAt[t] == null) return; const d = effAt(p, t) - starterAt[t]; if (!best || d > best.d) best = { t, d }; });
+    return best;
+  };
   const cols = [
     { k: 'pos', l: 'Pos', f: p => posCell(p), sv: p => posSort(p) },
     { k: 'name', l: 'Name', cls: 'name', f: p => esc(fullName(p)), sv: p => fullName(p) },
@@ -1796,6 +1832,10 @@ function renderTransfers() {
     { k: 'age', l: 'Age', n: 1, f: p => age(p), sv: p => age(p) },
     { k: 'ovr', l: 'OVR', n: 1, f: p => `<b>${Math.round(p.ovr)}</b>` },
     { k: 'pot', l: 'Pot.', n: 1, f: p => potLabel(p) },
+    { k: 'upg', l: 'vs your XI', sv: p => (upgrade(p) || { d: -99 }).d, title: 'Compared with your planned starter at his best position in your formation', f: p => {
+      const u = upgrade(p); if (!u) return '<span class="muted small">No slot in your shape</span>';
+      const d = Math.round(u.d);
+      return d >= 1 ? `<span class="tag" style="color:var(--win)">Starts at ${u.t} +${d}</span>` : d >= -3 ? `<span class="tag">Rotation at ${u.t} (${d})</span>` : `<span class="muted small">Backup at ${u.t} (${d})</span>`; } },
     { k: 'club', l: 'Club', f: p => p.fromClub ? esc(clubName(p.fromClub)) : '<span class="tag">Free agent</span>', sv: p => p.fromClub ? clubName(p.fromClub) : '' },
     { k: 'ask', l: 'Fee', n: 1, f: p => p.ask ? money(p.ask) : 'Free' },
     { k: 'wageAsk', l: 'Wage/wk', n: 1, f: p => wageFmt(p.wageAsk) },
@@ -1806,7 +1846,8 @@ function renderTransfers() {
   ];
   return `<div class="card"><div class="row between"><h2 style="margin:0">Transfer market</h2><span class="muted small">Available: <b>${money(w.available)}</b> · wage room: <b>${wageFmt(Math.max(0, S.wageCap - w.wages))}/wk</b> · squad ${w.size}/${MAX_SQUAD}</span></div>
     <div style="height:12px"></div>
-    <div class="chips">${filters.map(f => `<button class="chip ${UI.posFilter === f ? 'on' : ''}" data-action="posf" data-v="${f}">${f === 'All' ? 'All positions' : f === 'DEF' ? 'Defenders' : f === 'MID' ? 'Midfielders' : f === 'ATT' ? 'Attackers' : 'Goalkeepers'}</button>`).join('')}</div>
+    <div class="chips">${filters.map(x => `<button class="chip ${f === x ? 'on' : ''}" data-action="posf" data-v="${x}">${x === 'All' ? 'All positions' : x === 'DEF' ? 'Defenders' : x === 'MID' ? 'Midfielders' : x === 'ATT' ? 'Attackers' : 'Goalkeepers'}</button>`).join('')}</div>
+    <div class="chips sub">${POS_ORDER.filter(t => t !== 'GK').map(t => `<button class="chip ${f === t ? 'on' : ''}" data-action="posf" data-v="${t}">${t}</button>`).join('')}<span class="muted small" style="align-self:center">Sort by “vs your XI” to see who would start.</span></div>
     ${table('market', cols, list, { def: { k: 'ovr', d: 'desc' } })}
     <p class="muted small">Signings are immediate. Sales and loans are set from the Squad tab and complete when the season starts, but sale fees already count toward your budget.</p></div>`
     + transferSummary(S.window, seasonLabel(S.season), true);
@@ -1953,15 +1994,98 @@ function bestXI(Y, key) {
   };
   return assignSlots(rows.map(x => x.p), formOf(key).slots.map(x => x[0]), val).xi.map(x => ({ ...x, r: byId.get(x.p.id) }));
 }
-function pitchHtml(xi, key, mini) {
-  const slots = formOf(key).slots;
-  const lastCount = {}; xi.forEach(x => lastCount[x.p.last] = (lastCount[x.p.last] || 0) + 1);
+/* Pitch: one circle per slot, coloured by unit, with a rating inside and the name below.
+   entries: [{ idx, p, num, sub, cls }]; mode 'big' | 'mini' | 'plan' (plan = clickable slots). */
+function pitchHtml(entries, key, mode = 'big') {
+  const slots = formOf(key).slots, mini = mode === 'mini';
+  const lastCount = {}; entries.forEach(x => lastCount[x.p.last] = (lastCount[x.p.last] || 0) + 1);
   const nm = p => lastCount[p.last] > 1 ? `${p.first[0]}. ${p.last}` : p.last;
-  return `<div class="pitch ${mini ? 'mini' : ''}"><div class="pl-box top"></div><div class="pl-box bottom"></div><div class="pl-half"></div><div class="pl-circle"></div>
-    ${xi.map(x => { const [, l, px, py] = slots[x.idx]; return `<div class="pp ${labelGroup(l)}" style="left:${px}%;top:${py}%"><span class="dot">${mini ? '' : l}</span><span class="nm">${esc(nm(x.p))}</span>${mini ? '' : `<span class="st">${x.r.apps} apps · ${fmtAvg(x.r.avg)}</span>`}</div>`; }).join('')}</div>`;
+  const one = x => {
+    const [, l, px, py] = slots[x.idx];
+    const inner = `${mini ? '' : `<span class="lab">${l}</span>`}<span class="dot">${x.num ?? ''}</span><span class="nm">${esc(nm(x.p))}</span>${!mini && x.sub ? `<span class="st">${x.sub}</span>` : ''}`;
+    const cls = `pp ${labelGroup(l)} ${x.cls || ''}`, style = `left:${px}%;top:${py}%`;
+    return mode === 'plan'
+      ? `<button class="${cls} clickable" style="${style}" data-action="plan-slot" data-v="${x.idx}" aria-label="${l}: ${esc(fullName(x.p))}, rated ${x.num}. Change player">${inner}</button>`
+      : `<div class="${cls}" style="${style}">${inner}</div>`;
+  };
+  return `<div class="pitch ${mini ? 'mini' : ''}"><div class="pl-box top"></div><div class="pl-box bottom"></div><div class="pl-half"></div><div class="pl-circle"></div>${entries.map(one).join('')}</div>`;
 }
-function renderBestXI() {
-  if (!S.history.length) return `<div class="card"><div class="empty">Your first Best XI appears after your first season.</div></div>`;
+const unitKey = `<div class="keyrow"><span><i style="background:var(--c-gk)"></i>Goalkeeper</span><span><i style="background:var(--c-def)"></i>Defence</span><span><i style="background:var(--c-mid)"></i>Midfield</span><span><i style="background:var(--c-att)"></i>Attack</span></div>`;
+const effAt = (p, t) => p.ovr * fitP(p, t);
+
+/* Position report for a squad in a formation: the planned starter(s) at each position, how they
+   compare with the XI average, who else can play there, and whether the position needs a signing. */
+function positionReport(list, key) {
+  const { xi } = planXI(list, key);
+  const avg = xi.reduce((a, x) => a + x.eff, 0) / Math.max(1, xi.length);
+  const counts = {}; formTypes(key).forEach(t => counts[t] = (counts[t] || 0) + 1);
+  const rows = POS_ORDER.map(t => {
+    const able = list.filter(p => posList(p).includes(t)).sort((a, b) => effAt(b, t) - effAt(a, t));
+    const starters = xi.filter(x => x.slot === t);
+    const startEff = starters.length ? Math.min(...starters.map(x => x.eff)) : (able[0] ? effAt(able[0], t) : 0);
+    const used = counts[t] || 0, gap = startEff - avg;
+    let status = !used ? 'Not used' : gap >= 2 ? 'Strong' : gap >= -2 ? 'Solid' : gap >= -5 ? 'Below par' : 'Weak spot';
+    const thin = used && able.length < used + 1;
+    return { t, used, able, starters, startEff, gap, status, thin };
+  });
+  return { xi, avg, rows };
+}
+const STATUS_TAG = { 'Strong': 'tag', 'Solid': 'tag', 'Below par': 'tag warn', 'Weak spot': 'tag err', 'Not used': 'tag' };
+
+function renderPlanXI() {
+  const key = S.settings.formation;
+  const list = S.phase === 'window' ? windowProjection().staying : squad();
+  const rep = positionReport(list, key);
+  const pins = pinsFor(key), slots = formOf(key).slots;
+  const pinned = rep.xi.filter(x => pins[x.idx] === x.p.id).length;
+  const entries = rep.xi.map(x => {
+    const row = rep.rows.find(r => r.t === x.slot);
+    const weak = x.eff <= rep.avg - 4;
+    return { idx: x.idx, p: x.p, num: Math.round(x.eff), sub: `${age(x.p)} yrs${pins[x.idx] === x.p.id ? ' · pinned' : ''}${posList(x.p).includes(x.slot) ? '' : ' · out of pos.'}`,
+      cls: `${UI.planSlot === x.idx ? 'sel' : ''} ${weak ? 'weak' : ''}` };
+  });
+  const season = S.phase === 'window' ? seasonLabel(S.season) : `${seasonLabel(S.season)} (current squad)`;
+  let side;
+  if (UI.planSlot != null && slots[UI.planSlot]) {
+    const [t, l] = slots[UI.planSlot];
+    const cur = rep.xi.find(x => x.idx === UI.planSlot);
+    const cands = list.filter(p => (t === 'GK') === (p.pos === 'GK')).sort((a, b) => effAt(b, t) - effAt(a, t));
+    side = `<div class="row between" style="margin-bottom:8px"><h3 style="margin:0">Choose your ${l}</h3><button class="btn btn-sm" data-action="plan-close">Done</button></div>
+      <p class="muted small" style="margin:0 0 8px">Ratings are each player's strength at ${l}. A pinned player starts whenever he's fit; a tired or injured one is rested automatically.</p>
+      <div class="chooser">
+        <button class="choice ${pins[UI.planSlot] ? '' : 'on'}" data-action="plan-auto"><span><b>Let the manager choose</b><span class="muted small">Best available each match</span></span></button>
+        ${cands.map(p => { const e = Math.round(effAt(p, t)); const inXI = rep.xi.find(x => x.p.id === p.id);
+          return `<button class="choice ${pins[UI.planSlot] === p.id ? 'on' : ''}" data-action="plan-pick" data-id="${p.id}"><span>${posCell(p)} <b>${esc(fullName(p))}</b>
+            <span class="muted small">${age(p)} yrs${posList(p).includes(t) ? '' : ` · out of position (OVR ${Math.round(p.ovr)})`}${inXI && inXI.idx !== UI.planSlot ? ` · starting at ${slots[inXI.idx][1]}` : ''}${cur && cur.p.id === p.id ? ' · in this slot now' : ''}</span></span><span class="rt">${e}</span></button>`; }).join('')}
+      </div>`;
+  } else {
+    const used = rep.rows.filter(r => r.used).sort((a, b) => a.gap - b.gap);
+    side = `<h3 style="margin:0 0 8px">Positions, weakest first</h3>
+      ${table('posrep', [
+        { k: 't', l: 'Pos', f: r => `<span class="pos ${POS_GROUP[r.t]}">${r.t}</span>${r.used > 1 ? `<span class="altpos">×${r.used}</span>` : ''}` },
+        { k: 'st', l: 'Starter', cls: 'name', f: r => r.starters.map(x => esc(x.p.last)).join(', ') || '—' },
+        { k: 'r', l: 'Rating', n: 1, f: r => `<b>${Math.round(r.startEff)}</b> <span class="muted small">${r.gap >= 0 ? '+' : ''}${r.gap.toFixed(1)}</span>` },
+        { k: 's', l: 'Status', f: r => `<span class="${STATUS_TAG[r.status]}">${r.status}</span>${r.thin ? ' <span class="tag warn">Thin cover</span>' : ''}` },
+        { k: 'd', l: 'Depth', n: 1, f: r => r.able.length },
+        { k: 'm', l: '', f: r => S.phase === 'window' && (r.status === 'Weak spot' || r.status === 'Below par' || r.thin) ? `<button class="btn btn-sm" data-action="market-pos" data-v="${r.t}">Find a ${r.t}</button>` : '' }], used, { nosort: true })}
+      <p class="muted small">Rating is the starter's strength at that position; the number beside it is the gap to your XI average (${rep.avg.toFixed(1)}). Click a player on the pitch to choose who starts there.</p>`;
+  }
+  let html = `<div class="card" id="bxi-top"><div class="row between"><h2 style="margin:0">Your XI · ${season}</h2>
+      <div class="row"><label class="muted small" for="plan-form">Formation</label>${formationSelect('plan-form', 'formation', key)}${pinned ? `<button class="btn btn-sm" data-action="plan-clear">Unpin all (${pinned})</button>` : ''}</div></div>
+    <p class="muted small" style="margin:6px 0 14px">${pinned ? `${pinned} pinned, the rest picked automatically` : 'Picked automatically from your squad'}${S.phase === 'window' ? ', after your summer decisions' : ''}. Numbers are each player's rating in that position; a red ring marks a weak link.</p>
+    <div class="bxi-main"><div>${pitchHtml(entries, key, 'plan')}${unitKey}</div><div style="min-width:0">${side}</div></div></div>`;
+  // depth chart: every position, best to worst
+  const order = rep.rows.slice().sort((a, b) => (b.used ? 1 : 0) - (a.used ? 1 : 0) || POS_ORDER.indexOf(a.t) - POS_ORDER.indexOf(b.t));
+  html += `<div class="card"><div class="row between"><h2 style="margin:0">Depth chart</h2><span class="muted small">Everyone who lists each position, best to worst</span></div><div style="height:12px"></div>
+    <div class="depth">${order.map(r => `<div class="dcard ${r.used ? '' : 'unused'}"><div class="row between"><span><span class="pos ${POS_GROUP[r.t]}">${r.t}</span> <span class="muted small">${r.used ? `${r.used} in ${esc(key)}` : `not used in ${esc(key)}`}</span></span>${r.used ? `<span class="${STATUS_TAG[r.status]}">${r.status}</span>` : ''}</div>
+      ${r.able.length ? r.able.map((p, i) => { const e = Math.round(effAt(p, r.t)); const st = rep.xi.find(x => x.p.id === p.id);
+        return `<div class="drow ${st && st.slot === r.t ? 'xi' : ''}"><span><a href="#" data-action="player" data-id="${p.id}">${esc(fullName(p))}</a> <span class="muted small">${age(p)}${st && st.slot === r.t ? ' · XI' : st ? ` · XI at ${slots[st.idx][1]}` : ''}</span></span><b class="${i === 0 ? 'best' : i === r.able.length - 1 && r.able.length > 1 ? 'worst' : ''}">${e}</b></div>`; }).join('')
+        : '<div class="drow"><span class="muted">Nobody</span></div>'}
+      ${S.phase === 'window' && r.used ? `<button class="btn btn-sm" style="margin-top:8px" data-action="market-pos" data-v="${r.t}">Market: ${r.t}s</button>` : ''}</div>`).join('')}</div></div>`;
+  return html;
+}
+
+function renderPastXI() {
   const h = S.history.find(x => x.season === UI.bxiSeason) || S.history[S.history.length - 1];
   const own = h.formation || '4-3-3';
   const pickKey = hh => UI.bxiForm && UI.bxiForm !== 'season' ? UI.bxiForm : (hh.formation || '4-3-3');
@@ -1972,18 +2096,28 @@ function renderBestXI() {
   const list = xi.slice().sort((a, b) => GORD.indexOf(labelGroup(sl[a.idx][1])) - GORD.indexOf(labelGroup(sl[b.idx][1])) || sl[b.idx][3] - sl[a.idx][3] || sl[a.idx][2] - sl[b.idx][2]);
   const hi = S.history.indexOf(h);
   const stepper = `<button class="btn btn-sm" data-action="bxi-step" data-v="-1" ${hi <= 0 ? 'disabled' : ''} aria-label="Previous season" title="Previous season (←)">‹ Prev</button>${seasonSel}<button class="btn btn-sm" data-action="bxi-step" data-v="1" ${hi >= S.history.length - 1 ? 'disabled' : ''} aria-label="Next season" title="Next season (→)">Next ›</button>`;
+  const entries = xi.map(x => ({ idx: x.idx, p: x.p, num: x.r.ovr, sub: `${x.r.apps} apps · ${fmtAvg(x.r.avg)} avg` }));
   let html = `<div class="card" id="bxi-top"><div class="row between"><h2 style="margin:0">Best XI · ${h.label}</h2><div class="row">${stepper}${formSel}</div></div>
-    <p class="muted small" style="margin:6px 0 14px">${esc(key)}${key === own ? ' (the formation played that season)' : ` · that season was played in ${esc(own)}`}. Picked on average rating and appearances, favouring players who played the position.</p>
-    <div class="bxi-main"><div>${pitchHtml(xi, key, false)}
-      <div class="keyrow"><span><i style="background:var(--c-gk)"></i>Goalkeeper</span><span><i style="background:var(--c-def)"></i>Defence</span><span><i style="background:var(--c-mid)"></i>Midfield</span><span><i style="background:var(--c-att)"></i>Attack</span></div></div>
+    <p class="muted small" style="margin:6px 0 14px">${esc(key)}${key === own ? ' (the formation played that season)' : ` · that season was played in ${esc(own)}`}. Picked on average match rating and appearances, favouring players who played the position. Circles show each player's rating (OVR) that season.</p>
+    <div class="bxi-main"><div>${pitchHtml(entries, key, 'big')}${unitKey}</div>
       <div style="min-width:0">${table('bxi', [
         { k: 'pos', l: 'Pos', f: x => `<span class="pos ${POS_GROUP[x.slot]}">${formOf(key).slots[x.idx][1]}</span>` },
         { k: 'name', l: 'Player', cls: 'name', f: x => `<a href="#" data-action="player" data-id="${x.p.id}">${esc(fullName(x.p))}</a>${posList(x.p).includes(x.slot) ? '' : ' <span class="tag warn">out of pos.</span>'}` },
+        { k: 'ovr', l: 'OVR', n: 1, f: x => `<b>${x.r.ovr}</b>`, title: 'Rating that season' }, { k: 'age', l: 'Age', n: 1, f: x => x.r.age },
         { k: 'apps', l: 'Apps', n: 1, f: x => x.r.apps }, { k: 'g', l: 'G', n: 1, f: x => x.r.goals }, { k: 'a', l: 'A', n: 1, f: x => x.r.assists },
-        { k: 'avg', l: 'Avg', n: 1, f: x => fmtAvg(x.r.avg) }, { k: 'played', l: 'Played at', f: x => `<span class="muted small">${playedStr(x.r.posPlayed)}</span>` }], list, { nosort: true })}</div></div></div>`;
+        { k: 'avg', l: 'Avg', n: 1, f: x => fmtAvg(x.r.avg), title: 'Average match rating' }, { k: 'played', l: 'Played at', f: x => `<span class="muted small">${playedStr(x.r.posPlayed)}</span>` }], list, { nosort: true })}
+        <p class="muted small">XI average rating: <b>${(xi.reduce((a, x) => a + x.r.ovr, 0) / Math.max(1, xi.length)).toFixed(1)}</b></p></div></div></div>`;
   html += `<div class="card"><div class="row between"><h2 style="margin:0">Through the years</h2><span class="muted small">${!UI.bxiForm || UI.bxiForm === 'season' ? 'Each season in the formation it was played in' : `Every season in ${esc(UI.bxiForm)}`} · click one to open it</span></div><div style="height:12px"></div>
-    <div class="bxi-grid">${S.history.map(hh => { const k = pickKey(hh); return `<button class="bxi-card ${hh.season === h.season ? 'on' : ''}" data-action="bxi-pick" data-v="${hh.season}" aria-label="Best XI ${hh.label}"><span class="lbl">${hh.label}<span>${esc(k)}</span></span>${pitchHtml(bestXI(hh.season, k), k, true)}<span class="lbl"><span>${DIV_NAME[hh.div]} · ${ordinal(hh.pos)}</span>${hh.trophies.length ? `<span style="color:var(--gold)">🏆 ${hh.trophies.length}</span>` : ''}</span></button>`; }).join('')}</div></div>`;
+    <div class="bxi-grid">${S.history.map(hh => { const k = pickKey(hh); const bx = bestXI(hh.season, k); const av = bx.reduce((a, x) => a + x.r.ovr, 0) / Math.max(1, bx.length);
+      return `<button class="bxi-card ${hh.season === h.season ? 'on' : ''}" data-action="bxi-pick" data-v="${hh.season}" aria-label="Best XI ${hh.label}"><span class="lbl">${hh.label}<span>${esc(k)}</span></span>${pitchHtml(bx.map(x => ({ idx: x.idx, p: x.p, num: x.r.ovr })), k, 'mini')}<span class="lbl"><span>${DIV_NAME[hh.div]} · ${ordinal(hh.pos)} · XI ${av.toFixed(1)}</span>${hh.trophies.length ? `<span style="color:var(--gold)">🏆 ${hh.trophies.length}</span>` : ''}</span></button>`; }).join('')}</div></div>`;
   return html;
+}
+
+function renderBestXI() {
+  if (!UI.bxiMode) UI.bxiMode = S.phase === 'window' || !S.history.length ? 'plan' : 'past';
+  if (!S.history.length) UI.bxiMode = 'plan';
+  const tabs = `<div class="chips"><button class="chip ${UI.bxiMode === 'plan' ? 'on' : ''}" data-action="bxi-mode" data-v="plan">Your XI for ${seasonLabel(S.season)}</button>${S.history.length ? `<button class="chip ${UI.bxiMode === 'past' ? 'on' : ''}" data-action="bxi-mode" data-v="past">Past seasons' best XI</button>` : ''}</div>`;
+  return tabs + (UI.bxiMode === 'plan' ? renderPlanXI() : renderPastXI());
 }
 
 /* ---------------- league position chart ---------------- */
@@ -2237,6 +2371,17 @@ document.addEventListener('click', e => {
     case 'goseason': UI.viewSeason = +el.dataset.v; UI.tab = 'season'; render(); window.scrollTo(0, 0); break;
     case 'bxi-pick': UI.bxiSeason = +el.dataset.v; render(); document.getElementById('bxi-top')?.scrollIntoView({ block: 'start' }); break;
     case 'bxi-step': bxiStep(+el.dataset.v); break;
+    case 'bxi-mode': UI.bxiMode = el.dataset.v; UI.planSlot = null; render(); break;
+    case 'plan-slot': { const i = +el.dataset.v; UI.planSlot = UI.planSlot === i ? null : i; render(); break; }
+    case 'plan-close': UI.planSlot = null; render(); break;
+    case 'plan-auto': { const pins = S.lineups[S.settings.formation] = { ...pinsFor(S.settings.formation) }; delete pins[UI.planSlot]; UI.planSlot = null; save(); render(); break; }
+    case 'plan-pick': {
+      const id = +el.dataset.id, pins = { ...pinsFor(S.settings.formation) };
+      Object.keys(pins).forEach(k => { if (pins[k] === id) delete pins[k]; }); // a player can only be pinned once
+      pins[UI.planSlot] = id; S.lineups[S.settings.formation] = pins; UI.planSlot = null; save(); render(); break;
+    }
+    case 'plan-clear': S.lineups[S.settings.formation] = {}; UI.planSlot = null; save(); render(); break;
+    case 'market-pos': UI.tab = 'transfers'; UI.posFilter = el.dataset.v; render(); window.scrollTo(0, 0); break;
     case 'player': UI.modal = +el.dataset.id; renderModal(); break;
     case 'close': case 'close-bg': UI.modal = null; renderModal(); break;
     case 'export': exportXlsx(); break;
@@ -2254,7 +2399,7 @@ document.addEventListener('change', e => {
   const el = e.target;
   if (el.dataset.change === 'decide') { const p = S.players[+el.dataset.id]; if (p) { p.decision = el.value; save(); render(); } }
   if (el.dataset.change === 'viewseason') { UI.viewSeason = +el.value; render(); }
-  if (el.dataset.change === 'formation') { S.settings.formation = el.value; save(); render(); }
+  if (el.dataset.change === 'formation') { S.settings.formation = el.value; UI.planSlot = null; save(); render(); }
   if (el.dataset.change === 'bxi-form') { UI.bxiForm = el.value; render(); }
   if (el.dataset.change === 'bxi-season') { UI.bxiSeason = +el.value; render(); }
   if (el.dataset.change === 'luck') { S.settings.luck = el.value; save(); render(); }
@@ -2283,7 +2428,7 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && UI.modal) { UI.modal = null; renderModal(); return; }
   // ← / → flick through seasons on the Best XI tab (not while a dropdown or field has focus)
   const tag = document.activeElement && document.activeElement.tagName;
-  if (S && !UI.picker && UI.tab === 'bestxi' && !UI.modal && (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !['INPUT', 'SELECT', 'TEXTAREA'].includes(tag)) {
+  if (S && !UI.picker && UI.tab === 'bestxi' && UI.bxiMode === 'past' && !UI.modal && (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !['INPUT', 'SELECT', 'TEXTAREA'].includes(tag)) {
     e.preventDefault(); bxiStep(e.key === 'ArrowLeft' ? -1 : 1);
   }
 });
